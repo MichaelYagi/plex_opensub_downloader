@@ -1,208 +1,233 @@
-# Plex Open Subtitles Downloader
+# Plex Selenium Subtitle Downloader - Setup Guide
 
-Automatically download missing subtitles for your Plex media library using the OpenSubtitles API.
+This is a complete rewrite that automates the Plex web UI using Selenium to download subtitles.
+
+## Why Selenium?
+
+The Plex API method wasn't working reliably (500 errors), so this script automates what you would do manually:
+1. Opens Plex in a browser
+2. Navigates to each movie/show
+3. Clicks the subtitle dropdown
+4. Clicks "Search"
+5. Selects the subtitle with the most stars
+6. Downloads it
 
 ## Installation
 
+### 1. Install Python dependencies
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements_selenium.txt
+```
+
+### 2. Install ChromeDriver
+
+**On Mac:**
+```bash
+brew install chromedriver
+```
+
+**On Linux/WSL2:**
+```bash
+# Download ChromeDriver
+wget https://chromedriver.storage.googleapis.com/LATEST_RELEASE
+LATEST=$(cat LATEST_RELEASE)
+wget https://chromedriver.storage.googleapis.com/${LATEST}/chromedriver_linux64.zip
+unzip chromedriver_linux64.zip
+sudo mv chromedriver /usr/local/bin/
+sudo chmod +x /usr/local/bin/chromedriver
+```
+
+**On Windows:**
+- Download from https://chromedriver.chromium.org/
+- Add to PATH
+
+### 3. Verify ChromeDriver works
+
+```bash
+chromedriver --version
 ```
 
 ## Configuration
 
-Create a `.env` file in the project root:
+Your existing `.env` file works:
 
 ```bash
-# Plex Configuration
-PLEX_URL=http://localhost:32400
-PLEX_TOKEN=your-plex-token-here
-
-# OpenSubtitles Configuration (required for local method)
-OPENSUBTITLES_API_KEY=your-api-key-here
-OPENSUBTITLES_USERNAME=your-username
-OPENSUBTITLES_PASSWORD=your-password
-
-# Subtitle Languages (comma-separated, 2-letter codes)
+PLEX_URL=http://192.168.0.199:32400
+PLEX_TOKEN=your-token-here
 SUBTITLE_LANGUAGES=en
 ```
 
-## Download Methods
-
-### Local Method (default)
-✅ Full control over subtitle selection (rating, downloads)  
-✅ Best subtitle quality  
-✅ Detailed reporting  
-❌ Requires filesystem access to media files  
-❌ Requires OpenSubtitles API credentials  
-
-### Plex Method
-✅ Works remotely (no filesystem access needed)  
-✅ No OpenSubtitles credentials required (uses Plex's account)  
-✅ Simpler setup  
-❌ Less control over which subtitle is selected  
-❌ Limited to Plex's OpenSubtitles rate limits  
-❌ Less detailed reporting  
-
 ## Usage
 
-### Check Status First
-Always run a status check before downloading to verify your configuration:
+### Basic Usage
 
 ```bash
-# Check status with local method (requires OpenSubtitles credentials)
-python downloader.py --status
+# Download subtitles for Movies library (shows browser)
+python selenium_downloader.py --library "Movies" --max-downloads 10
 
-# Check status with plex method (no credentials required)
-python downloader.py --status --method plex
+# Download for TV Shows
+python selenium_downloader.py --library "TV Shows" --max-downloads 5
 ```
 
-<details>
-<summary>Example Status Output</summary>
-
-```
-================================================================================
-PLEX SUBTITLE DOWNLOADER - STATUS CHECK
-================================================================================
-
-Checking Environment Variables...
---------------------------------------------------------------------------------
-  ✓ .env file found at: /home/user/plex-subtitles/.env
-  ✓ PLEX_URL: http://192.168.1.100:32400
-  ✓ PLEX_TOKEN: ********************abcd
-  ✓ OPENSUBTITLES_API_KEY: ********************xyz9
-  ✓ OPENSUBTITLES_USERNAME: myusername
-  ✓ OPENSUBTITLES_PASSWORD: ************
-  ✓ SUBTITLE_LANGUAGES: en, es
-
-Checking Plex Connection...
---------------------------------------------------------------------------------
-  ✓ Connected to Plex server: MyPlexServer
-    Version: 1.32.8.7639
-    Platform: Linux
-  ✓ Found 2 movie and 1 TV show libraries:
-    - Movies (Movies): 450 items
-    - 4K Movies (Movies): 120 items
-    - TV Shows (TV Shows): 85 shows
-  ✓ Write permissions OK in: /mnt/media/Movies/Inception (2010)
-
-Checking OpenSubtitles API Key...
---------------------------------------------------------------------------------
-  ✓ OpenSubtitles API key is valid
-    Rate limit: 38/40 requests remaining
-
-Checking OpenSubtitles Login...
---------------------------------------------------------------------------------
-  ✓ Successfully logged in as: myusername
-    Account level: Sub-user
-    Daily download limit: 200
-    Downloads remaining today: 195
-    Quota resets in: 18 hours and 32 minutes
-
-================================================================================
-✓ STATUS: READY TO DOWNLOAD SUBTITLES
-================================================================================
-```
-</details>
-
-### Download Subtitles
+### Headless Mode (No Browser Window)
 
 ```bash
-# Download for specific library with limit (local method)
-python downloader.py --library "Movies" --max-downloads 10
-
-# Download using Plex method (works remotely)
-python downloader.py --method plex --library "Movies" --max-downloads 10
-
-# Download for all libraries with limit
-python downloader.py --max-downloads 50
-
-# Download everything in a library (no limit)
-python downloader.py --library "Movies"
-
-# Download with multiple languages
-python downloader.py --languages en es fr --library "Movies"
-
-# Custom report filename
-python downloader.py --max-downloads 20 --report my_report.txt
+# Run without showing browser (faster, good for automation)
+python selenium_downloader.py --library "Movies" --max-downloads 10 --headless
 ```
 
-### Download Report
+### Filter by Type
 
-After downloading, a detailed report is generated showing what was downloaded:
+```bash
+# Only movies
+python selenium_downloader.py --library "Movies" --type movie --max-downloads 10
 
-<details>
-<summary>Example Report Output</summary>
+# Only episodes
+python selenium_downloader.py --library "TV Shows" --type episode --max-downloads 5
+```
+
+### Multiple Languages
+
+```bash
+python selenium_downloader.py --library "Movies" --languages en es --max-downloads 10
+```
+
+## How It Works
+
+1. **Connects to Plex API** - Gets list of items missing subtitles
+2. **Opens Chrome browser** - Authenticates using your Plex token
+3. **For each item missing subtitles:**
+   - Navigates to the item's page
+   - Clicks the "Subtitles" dropdown
+   - Clicks "Search"
+   - Finds all subtitle results
+   - Counts the stars on each subtitle
+   - Selects and downloads the one with the most stars
+4. **Generates report** - Shows what succeeded/failed
+
+## Example Output
+
+```
+2026-01-17 11:00:00 - __main__ - INFO - Connected to Plex server: M1 Mac Mini
+2026-01-17 11:00:00 - __main__ - INFO - Target languages: en
+============================================================
+Processing library: Movies
+Max downloads: 10
+============================================================
+
+Found 416 items to scan
+2026-01-17 11:00:05 - __main__ - INFO - Chrome WebDriver initialized
+2026-01-17 11:00:10 - __main__ - INFO - Successfully logged into Plex
+
+[1/416] Needs subtitles
+============================================================
+Processing: Inception
+URL: http://192.168.0.199:32400/web/index.html#!/server/.../details?key=/library/metadata/123
+============================================================
+2026-01-17 11:00:15 - __main__ - INFO - Navigating to item page...
+2026-01-17 11:00:18 - __main__ - INFO - Looking for subtitle button...
+2026-01-17 11:00:19 - __main__ - INFO - Found subtitle button
+2026-01-17 11:00:19 - __main__ - INFO - Clicking subtitle button...
+2026-01-17 11:00:21 - __main__ - INFO - Looking for Search option...
+2026-01-17 11:00:21 - __main__ - INFO - Found search button
+2026-01-17 11:00:21 - __main__ - INFO - Clicking Search...
+2026-01-17 11:00:24 - __main__ - INFO - Looking for subtitle results...
+2026-01-17 11:00:24 - __main__ - INFO - Found 8 subtitle results
+2026-01-17 11:00:24 - __main__ - INFO - Selecting subtitle with 5 stars
+2026-01-17 11:00:26 - __main__ - INFO - ✓ Successfully downloaded subtitle for Inception
+```
+
+## Generated Report
+
+After running, you'll get a report like:
 
 ```
 ================================================================================
-SUBTITLE DOWNLOAD REPORT
+SUBTITLE DOWNLOAD REPORT (SELENIUM)
 ================================================================================
-Total subtitles downloaded: 15
-Generated: 2026-01-17 14:30:22
+Total processed: 10
+Successful: 8
+Failed: 2
+Generated: 2026-01-17 11:15:30
 ================================================================================
 
-MOVIES (10 subtitles)
+SUCCESSFUL DOWNLOADS (8)
 --------------------------------------------------------------------------------
 
 Inception
-  Language: EN
-  Rating: 8.5/10
-  Downloads: 45,203
-  Release: Inception.2010.1080p.BluRay.x264
-  Uploader: john_doe
-  File: Inception.en.srt
-  Timestamp: 2026-01-17 14:25:10
+  Type: movie
+  Rating: 5 stars
+  Timestamp: 2026-01-17 11:00:26
 
-TV EPISODES (5 subtitles)
+The Matrix
+  Type: movie
+  Rating: 4 stars
+  Timestamp: 2026-01-17 11:02:15
+
+FAILED DOWNLOADS (2)
 --------------------------------------------------------------------------------
 
-Breaking Bad - S01E01 - Pilot
-  Language: EN
-  Rating: 9.2/10
-  Downloads: 12,450
-  Release: Breaking.Bad.S01E01.1080p.WEB-DL
-  Uploader: subtitle_master
-  File: S01E01.en.srt
-  Timestamp: 2026-01-17 14:28:33
-
-================================================================================
-SUMMARY STATISTICS
-================================================================================
-Average subtitle rating: 8.7/10
-Total community downloads: 234,567
-
-Language breakdown:
-  EN: 15
-================================================================================
+Some Obscure Movie
+  Type: movie
+  Error: No subtitle results found
+  URL: http://192.168.0.199:32400/web/index.html#!/server/.../details?key=/library/metadata/999
 ```
-</details>
-
-## Command-Line Options
-
-| Option | Description |
-|--------|-------------|
-| `--status` | Check configuration without downloading |
-| `--method` | `local` (default) or `plex` download method |
-| `--library` | Specific library name to process |
-| `--max-downloads` | Maximum number of subtitles to download |
-| `--languages` | Space-separated language codes (e.g., `en es fr`) |
-| `--type` | Filter by `movie` or `episode` |
-| `--report` | Custom report filename (default: `subtitle_download_report.txt`) |
-| `--verbose` | Enable detailed logging |
-
-## Getting API Credentials
-
-1. **Plex Token**: Sign in to Plex Web App → Open browser dev tools (F12) → Network tab → Look for `X-Plex-Token` in request headers
-2. **OpenSubtitles API Key**: Sign up at [opensubtitles.com](https://www.opensubtitles.com) → Go to [API Consumers](https://www.opensubtitles.com/en/consumers) → Create new application
 
 ## Troubleshooting
 
-**"Media directory not accessible" warning:**
-- Use `--method plex` if running script remotely from Plex server
-- Or run the script directly on the machine where Plex server is hosted
+### "ChromeDriver not found"
+```bash
+# Install ChromeDriver (see Installation section above)
+```
 
-**Rate limit errors:**
-- Script automatically handles rate limits with retry logic
-- Check your daily download quota with `--status`
+### "Failed to initialize Chrome WebDriver"
+```bash
+# Make sure Chrome browser is installed
+# On Mac: brew install google-chrome
+# On Linux: sudo apt-get install chromium-browser
+```
+
+### Plex UI changed / buttons not found
+The script tries multiple selectors, but if Plex changes their UI significantly, you may need to:
+1. Run without `--headless` to see what's happening
+2. Check the error messages
+3. Update the selectors in the script
+
+### Browser opens but nothing happens
+- Check your `PLEX_TOKEN` is correct
+- Make sure you can access Plex at the URL in your browser manually
+
+## Performance
+
+- **With GUI (no --headless):** ~15-30 seconds per item
+- **Headless mode:** ~10-20 seconds per item
+- Downloading 10 subtitles takes approximately 3-5 minutes
+
+## Advantages Over API Method
+
+✅ Works when Plex API gives 500 errors  
+✅ Selects highest-rated subtitles  
+✅ Uses Plex's own search (same as manual)  
+✅ No OpenSubtitles API credentials needed  
+✅ Handles Plex authentication automatically  
+
+## Disadvantages
+
+❌ Slower than direct API (15-30s vs 2-5s per item)  
+❌ Requires ChromeDriver installation  
+❌ Breaks if Plex UI changes significantly  
+❌ Uses more resources (runs full browser)  
+
+## Recommendation
+
+Use this Selenium method when:
+- The API method gives errors
+- You want the highest-rated subtitles
+- You don't mind it being slower
+- You're running interactively (can watch progress)
+
+Use the original API method when:
+- You have filesystem access (running on Plex server)
+- You want speed
+- You want to download hundreds of subtitles
