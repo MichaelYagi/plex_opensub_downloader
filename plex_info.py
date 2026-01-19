@@ -1073,7 +1073,38 @@ For more information, see the README.md file.
             logger.info(f"Total libraries: {len(export_data['libraries'])}")
             total_items = sum(len(lib['items']) for lib in export_data['libraries'])
             logger.info(f"Total items: {total_items}")
-            logger.info(f"Open {output_file} in your browser to view the data")
+            logger.info(f"Opening {output_file} in your browser...")
+
+            # Open in browser (handle WSL2)
+            import webbrowser
+            import subprocess
+            import platform
+
+            file_path = os.path.abspath(output_file)
+
+            # Check if running in WSL2
+            try:
+                with open('/proc/version', 'r') as f:
+                    if 'microsoft' in f.read().lower():
+                        # WSL2 - convert path to Windows format and use Windows browser
+                        # Convert /mnt/c/path to C:/path
+                        if file_path.startswith('/mnt/'):
+                            drive_letter = file_path[5].upper()
+                            windows_path = drive_letter + ':' + file_path[6:].replace('/', '\\')
+                        else:
+                            # Use wslpath to convert
+                            result = subprocess.run(['wslpath', '-w', file_path], capture_output=True, text=True)
+                            windows_path = result.stdout.strip()
+
+                        # Open with Windows default browser
+                        subprocess.run(['cmd.exe', '/c', 'start', windows_path], stderr=subprocess.DEVNULL)
+                        return
+            except:
+                pass
+
+            # Not WSL2 or conversion failed - use normal method
+            webbrowser.open(f'file://{file_path}')
+
             return
 
         # If --system flag, show system info and exit
